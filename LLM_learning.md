@@ -1,22 +1,47 @@
 # LLM
 
-# agent
+## 名词
+
++ Language model 语言模型，在参数增加的过程中，语言模型涌现出了智能，为了加以区分使用Large，构成LLM
+
++ context，上下文，一般指代提问中的背景信息
++ memory，对话的历史记录
++ RAG，检索增强生成，通过语言匹配向量化信息，并加入上下文
++ function callling，agent与LLM关于工具调用约定的对话格式
++ MCP，模型上下文协议，让智能体以统一的方式连接外部工具、数据源和服务，这样一个工具只需开发一次就可以适配所有支持MCP的框架
++ Skill，agent的技能，一份结构化的能力说明文件，告诉agent什么场景触发，什么步骤执行，失败了怎么办，是可复用的能力模块
 
 
 
-## 定义
+
+
+**🔬 算法工程师路径**：
+
+- Agent 推理与规划：ReAct、Reflexion、Tree/Graph Search、Tool-use 策略
+- RAG 与记忆算法：Hybrid Retrieval、Rerank、GraphRAG、Agentic RAG、Memory 压缩与召回
+- Post-training：SFT、LoRA/QLoRA、DPO/GRPO、工具调用/轨迹数据合成与评测
+
+**🛠️ 开发工程师路径**：
+
+- Agent Harness：状态管理、工具注册、权限确认、sandbox、trace、replay、成本控制
+- 工具与协议：MCP、Skills、A2A/ACP、API adapter、Browser / Computer-use 工具封装
+- 生产级 RAG：文档解析、向量库、rerank、引用、观测、CI eval 与安全红队
+
+
+
+# Agent
+
+<img src="assets/image-20260629105807142.png" alt="image-20260629105807142" style="zoom:67%;" />
+
+<img src="assets/image-20260629111024137.png" alt="image-20260629111024137" style="zoom:67%;" />
+
+
+
+## basic
+
+### 智能体定义
 
 智能体被定义为任何能够通过**传感器（Sensors）**感知其所处**环境（Environment）**，并**自主**地通过**执行器（Actuators）**采取**行动（Action）**以达成特定目标的实体。
-
-
-
-传统视角下的智能体经历了一条从简单到复杂、从被动反应到主动学习的清晰演进路线
-
-+ **反射智能体**：结构最简单，它们的决策核心由工程师明确设计的“条件-动作”规则构成，自动恒温器是其中一种
-+ **基于模型的反射智能体**：内部拥有**世界模型（智能体对外部世界运行规律的内部表示）**，用于追踪和理解环境中那些无法被直接感知的方面
-+ **基于目标的智能体**：主动地、有预见性地选择能够导向某个特定未来状态的行动
-+ **基于效用的智能体**：最大化期望效用，在相互冲突的目标之间进行权衡
-+ **学习型智能体**：不依赖预设，而是通过与环境的互动**自主学习**（强化学习）进行决策
 
 
 
@@ -34,7 +59,481 @@
 
 
 
+Agent的八个组成部分
 
+| 模块            | 作用                     | 面试追问                     |
+| :-------------- | :----------------------- | :--------------------------- |
+| Goal            | 定义任务和成功标准       | 怎么判断任务完成？           |
+| Policy          | 系统规则、安全边界、权限 | 哪些动作必须人工确认？       |
+| State           | 当前进度、历史、临时产物 | 长任务如何恢复？             |
+| Memory          | 可复用经验和用户偏好     | 什么值得存，什么时候忘？     |
+| Context Builder | 组装模型输入             | 如何避免上下文污染？         |
+| Tool Registry   | 声明可调用工具           | schema、错误、权限怎么设计？ |
+| Loop Controller | 决定下一步和停止条件     | 如何防止无限循环？           |
+| Eval / Trace    | 记录和评估行为           | 如何证明 Agent 有效？        |
+
+
+
+### decoder-only架构
+
+生成任务本质上是在一个已有的文本序列后面，一个词一个词地添加内容，基于这个思想GPT抛弃了编码器，只保留解码器
+
+
+
+Decoder-Only 架构的工作模式被称为**自回归 (Autoregressive)**
+
+1. 给模型一个起始文本（例如 “Datawhale Agent is”）。
+2. 模型预测出下一个最有可能的词（例如 “a”）。
+3. 模型将自己刚刚生成的词 “a” 添加到输入文本的末尾，形成新的输入（“Datawhale Agent is a”）。
+4. 模型基于这个新输入，再次预测下一个词（例如 “powerful”）。
+5. 不断重复这个过程，直到生成完整的句子或达到停止条件。
+
+
+
+**Decoder-Only 架构的优势**
+
+- **训练目标统一**：模型的唯一任务就是“预测下一个词”，这个简单的目标非常适合在海量的无标注文本数据上进行预训练。
+- **结构简单，易于扩展**：更少的组件意味着更容易进行规模化扩展。今天的 GPT-4、Llama 等拥有数千亿甚至万亿参数的巨型模型，都是基于这种简洁的架构。
+- **天然适合生成任务**：其自回归的工作模式与所有生成式任务（对话、写作、代码生成等）完美契合，这也是它能成为构建通用智能体基础的核心原因。
+
+
+
+### BPE分词算法
+
+古典分词算法（按空格划分，符号划分...）会导致词表规模过大，出现**Out Of Vocabulary, OOV**问题；按照单个字符的划分方法，序列太长。
+
+
+
+BPE（Byte Pair Encoding，字节对编码），是一种字词分词算法，核心思想是：从最小的单位开始，**不断合并出现频率最高的相邻符号对**。
+
+
+
+以下述语料为例
+
+```
+low
+lower
+newest
+widest
+```
+
+先拆分为字符，再加结束符，结束符可以防止出现lowe，因为low <w>的频率约束
+
+```
+l o w </w>
+l o w e r </w>
+n e w e s t </w>
+w i d e s t </w>
+```
+
+初始词表为
+
+```
+l
+o
+w
+e
+r
+n
+s
+t
+i
+d
+</w>
+```
+
+
+
+统计所有相邻符号对，出现最多的是<l,o>，合并lo，语料变为
+
+```
+lo w </w>
+lo w e r </w>
+n e w e s t </w>
+w i d e s t </w>
+```
+
+词表中新增lo
+
+
+
+再次统计频率，(lo,w)最高，继续合并
+
+```
+low </w>
+low e r </w>
+n e w e s t </w>
+w i d e s t </w>
+```
+
+词表新增low
+
+
+
+不断迭代，最终得到词表和合并规则
+
+
+
+推理时，先拆分字符再按照合并规则得到一个词对应的sub token 
+
+```
+[lower]
+
+l o w e r
+
+l o -> lo
+lo w -> low
+e r -> er
+
+[low, er]
+```
+
+
+
+### 与模型交互
+
+**模型采样参数**Temperature，通过调整模型对 “概率分布” 的采样策略，也就是$$ \text{将 Softmax 改写为 } p_i^{(T)} = \frac{e^{z_i/T}}{\sum_{j=1}^k e^{z_j/T}} $$，让输出匹配具体场景需求
+
+- 低温度（0 ⩽ Temperature < 0.3）时输出更 “精准、确定”。适用场景： 事实性任务：如问答、数据计算、代码生成； 严谨性场景：法律条文解读、技术文档撰写、学术概念解释等场景。
+- 中温度（0.3 ⩽ Temperature < 0.7）：输出 “平衡、自然”。适用场景： 日常对话：如客服交互、聊天机器人； 常规创作：如邮件撰写、产品文案、简单故事创作。
+- 高温度（0.7 ⩽ Temperature < 2）：输出 “创新、发散”。适用场景： 创意性任务：如诗歌创作、科幻故事构思、广告 slogan brainstorm、艺术灵感启发； 发散性思考。
+
+
+
+根据给模型提供示例（Exemplar）的数量，提示可以分为三种类型
+
+
+
+**零样本提示** 不给任何实例
+
+```Python
+文本:Datawhale的AI Agent课程非常棒！
+情感:正面
+```
+
+
+
+**单样本提示** 给模型提供一个完整的示例，向它展示任务的格式和期望的输出风格
+
+```Python
+文本:这家餐厅的服务太慢了。
+情感:负面
+
+文本:Datawhale的AI Agent课程非常棒！
+情感:
+```
+
+
+
+**少样本提示** 提供多个示例，这能让模型更准确地理解任务的细节、边界和细微差别，从而获得更好的性能
+
+```Python
+文本:这家餐厅的服务太慢了。
+情感:负面
+
+文本:这部电影的情节很平淡。
+情感:中性
+
+文本:Datawhale的AI Agent课程非常棒！
+情感:
+```
+
+
+
+
+
+**指令调优** 是一种微调技术，它使用大量“指令-回答”格式的数据对预训练模型进行进一步的训练，极大地简化了与模型交互的方式，使得直接、清晰的自然语言指令成为可能
+
+
+
+**思维链 (Chain-of-Thought, CoT)** 是一种强大的提示技巧，它通过引导模型“一步一步地思考”，提升了模型在复杂任务上的推理能力。实现 CoT 的关键，是在提示中加入一句**简单的引导语**，如“请逐步思考”或“Let's think step by step”。对于需要逻辑推理、计算或多步骤思考的复杂问题非常重要。
+
+
+
+### 缩放定律
+
+**缩放法则（Scaling Laws）**，模型性能与模型参数量、训练数据量以及计算资源之间存在着可预测的幂律关系，只要持续、按比例地增加这三个要素，模型的性能就会可预测地、平滑地提升，而不会出现明显的瓶颈。
+
+**Chinchilla 定律**，在给定的预算下，为了达到最优性能，**模型参数量和训练数据量之间存在一个最优配比**
+
+
+
+缩放定律带来的最惊奇地产物是”能力的涌现“，**链式思考 (Chain-of-Thought)** 、**指令遵循 (Instruction Following)** 、多步推理、代码生成等能力，都是在模型参数量达到数百亿甚至千亿级别后才显著出现的，这说明模型在学习的过程中可能形成了某种更深层次的抽象和推理能力。
+
+
+
+### 模型幻觉
+
+**模型幻觉**指大预言模型生成了不存在的事实、实体或事件，幻觉的产生是多方面因素共同作用的结果，首先，训练数据中可能包含错误或矛盾的信息。其次，模型的自回归生成机制决定了它只是在预测下一个最可能的词元，而没有内置的事实核查模块。最后，在面对需要复杂推理的任务时，模型可能会在逻辑链条中出错，从而“编造”出错误的结论
+
+
+
+1. **数据层面**： 通过高质量数据清洗、引入事实性知识以及强化学习与人类反馈 (RLHF) 等方式，从源头减少幻觉。
+2. **模型层面**： 探索新的模型架构，或让模型能够表达其对生成内容的不确定性。
+3. 推理与生成层面
+   1. **检索增强生成 (Retrieval-Augmented Generation, RAG)**： 这是目前缓解幻觉的有效方法之一。RAG 系统通过在生成之前从外部知识库（如文档数据库、网页）中检索相关信息，然后将检索到的信息作为上下文，引导模型生成基于事实的回答。
+   2. **多步推理与验证**： 引导模型进行多步推理，并在每一步进行自我检查或外部验证。
+   3. **引入外部工具**： 允许模型调用外部工具（如搜索引擎、计算器、代码解释器）来获取实时信息或进行精确计算。
+
+## 智能体范式
+
+### ReAct框架
+
+> ReAct = Reasoning + Acting，它让模型在推理和行动之间交替：先判断下一步，再调用工具，再根据观察结果继续。每一步都是思考-动作-观察的循环
+
+
+
+下述是一个简单的例子
+
+用户提问：
+
+```
+马斯克创办了哪些公司？
+```
+
+Agent执行过程：
+
+```
+Thought:
+需要先查马斯克的信息
+
+Action:
+Search("Elon Musk companies")
+
+Observation:
+Tesla, SpaceX, xAI ...
+
+Thought:
+已经获得结果，可以整理答案
+
+Final Answer:
+...
+```
+
+
+
+Prompt 结构
+
+```python
+You are an agent that solves the task by calling tools.
+
+Rules:
+- Use only the listed tools.
+- Stop when enough evidence is collected.
+- If evidence is missing, say what is missing.
+- Never fabricate tool results.
+
+Task:
+{task}
+
+Tools:
+{tool_cards}
+
+Previous observations:
+{observations}
+
+Return JSON:
+{
+  "type": "tool_call | final",
+  "tool": "tool name or null",
+  "args": {},
+  "answer": "final answer or null",
+  "reason_summary": "short auditable reason"
+}
+```
+
+
+
+Tool Card
+
+ReAct的失败常常不是模型不会推理，而是工具描述太差，工具的描述需要写清楚
+
+```markdown
+## Tool: search_papers
+
+**Purpose**：按关键词搜索论文元数据，返回标题、摘要、作者、年份、链接和引用信息。
+
+**Use When**：
+- 用户需要查找某个主题的代表论文。
+- Agent 需要为答案补充可引用证据。
+- 需要比较不同方法的提出时间和核心贡献。
+
+**Do Not Use When**：
+- 用户已经给了具体 PDF，并要求只基于该 PDF 回答。
+- 问题需要网页实时信息而不是学术论文。
+
+**Input Schema**：
+```json
+{
+  "query": "string, required",
+  "year_from": "integer, optional",
+  "year_to": "integer, optional",
+  "max_results": "integer, default 5, max 20"
+}
+```
+
+**Output Schema**：
+
+```json
+{
+  "ok": true,
+  "items": [
+    {
+      "title": "string",
+      "authors": ["string"],
+      "year": 2025,
+      "abstract": "string, truncated to 800 chars",
+      "url": "string",
+      "source": "arXiv | Semantic Scholar | OpenAlex"
+    }
+  ],
+  "next_page_token": "string | null"
+}
+```
+
+**Errors**：
+
+| error                | retryable | Agent 应对                    |
+| :------------------- | :-------: | :---------------------------- |
+| `rate_limited`       |    yes    | 降低 `max_results` 或稍后重试 |
+| `empty_result`       |    no     | 改写 query 或放宽年份         |
+| `source_unavailable` |    yes    | 切换备用数据源                |
+
+**Security**：
+
+- 只访问公开论文元数据。
+- 不抓取付费墙内容。
+- 不把 API key 写入 trace。
+
+
+
+常见失败模式
+
+| 失败         | 现象                   | 修复                                |
+| :----------- | :--------------------- | :---------------------------------- |
+| 无限循环     | 一直搜索或重复点击     | 最大步数、重复动作检测              |
+| 工具选择错   | 本该查数据库却搜网页   | 工具描述加 Use When / Do Not Use    |
+| 观察过长     | 工具返回淹没关键信息   | 工具层分页、摘要、截断              |
+| 过早 final   | 证据不足就回答         | evidence gate、引用检查             |
+| 幻觉工具结果 | 没调用工具却声称查到了 | trace 强制引用 observation          |
+| 高风险动作   | 自动付款、删除、提交   | permission tier + human-in-the-loop |
+
+评测时至少记录：
+
++ 任务平均成功率
++ 平均步数
++ 工具调用成功率
++ 成本和延迟
++ 重复动作次数
+
+
+
+### Plan and Slove
+
+Plan and Slove是一种智能体范式，核心思想是：**与其让模型一步步思考，不如先让模型制定一个计划，然后按计划执行**。
+
+
+
+Plan and Slove的运作机制分为两个核心阶段：
+
++ **第一阶段是计划生成，需要识别约束条件，子目标分解，逻辑排序**
++ **第二阶段是计划执行，每一个子步骤的计算结果会作为下一轮推理的上下文，这个过程中同时维护状态**
+
+
+
+Plan and Slove的优劣
+
+优势：可解释性强；支持复杂任务建模；能保证逻辑一致性；有效缓解COT中常见的推理漂移问题；
+
+劣势：对模型的逻辑能力要求高；缺乏动态适应性；如果执行过程中环境发生了变化，静态计划无法自动调整；计划与执行可能断层
+
+
+
+由于存在两个阶段，因此Plan and Slove有两个prompt
+
+~~~python
+PLANNER_PROMPT_TEMPLATE = """
+你是一个顶级的AI规划专家。你的任务是将用户提出的复杂问题分解成一个由多个简单步骤组成的行动计划。 请确保计划中的每个步骤都是一个独立的、可执行的子任务，并且严格按照逻辑顺序排列。 你的输出必须是一个Python列表，其中每个元素都是一个描述子任务的字符串。 
+问题: {question}
+请严格按照以下格式输出你的计划,```python与```作为前后缀是必要的: 
+```python 
+["步骤1", "步骤2", "步骤3", ...] 
+``` 
+""" 
+~~~
+
+```python
+EXECUTOR_PROMPT_TEMPLATE = """
+你是一位顶级的AI执行专家。你的任务是严格按照给定的计划，一步步地解决问题。
+你将收到原始问题、完整的计划、以及到目前为止已经完成的步骤和结果。
+请你专注于解决“当前步骤”，并仅输出该步骤的最终答案，不要输出任何额外的解释或对话。
+# 原始问题:
+{question}
+
+# 完整计划:
+{plan}
+
+# 历史步骤与结果:
+{history}
+
+# 当前步骤:
+{current_step}
+
+请仅输出针对“当前步骤”的回答:
+"""
+```
+
+
+
+### Claude Code和 Openclaw的范式拆解
+
+
+
+对于工程级别的agent，它们不会单纯依赖 ReAct 或 Plan And Solve，实际应用的是“**宏观计划+微观ReAct**”
+
+接收到需求后，首先生成一个Task List，针对每一个子任务进入类似ReAct的循环，如果子任务的执行结果与预期不符，会更新全局计划。
+
+
+
+## Memory
+
+大语言模型本身的能力虽然强大，但是它的设计是**无状态**的，**即每一次用户请求都是独立无关联的计算**，模型本身不会自动记住上一次对话的内容。
+
+另一方面，**模型的知识是静态的、有限的，无法获取最新信息**。
+
+
+
+为了突破这两点局限，智能体的记忆系统被分为了Memory（日记本）和RAG（百科全书），分别对应人类的短期记忆和长期记忆
+
+<img src="assets/image-20260630190417706.png" alt="image-20260630190417706" style="zoom:67%;" />
+
+## Memory系统的设计
+
+记忆系统的工作流程如下，这种架构设计本质是通过冷热数据分离和结构化/非结构化混合存储（关系型，向量和图谱），解决单一存储模式下信息过载和检索精度不足的问题
+
+![image-20260630200301937](assets/image-20260630200301937.png)
+
+
+
+**记忆的写入**
+
+自动分类机制：系统不会把所有信息混为一谈，而是根据内容属性分流到四种记忆模型
+
++ 工作记忆：缓存当前会话中最近发生的交互片段，在内存中被读写，到期自动清除
++ 情节记忆：记录具体的事件流，包括时间戳、任务状态和执行结果
++ 语义记忆：存储抽象知识和概念（类似于对话中的规则），是智能体真正内化的知识体系
++ 感知记忆：多模态信息
+
+统一嵌入服务：分类后的记忆会经过Embedding接口转化为向量，实现从原始数据到数学表达的对齐
+
+
+
+**记忆的搜索**
+
+当Agent需要提取相关知识时，启动检索
+
++ 跨类型检索，同时向上述四种记忆模块发起请求，而不是单一搜索
++ 各级记忆类型独立：情节记忆搜索时间，语义记忆搜索知识，感知记忆搜索模块，各司其职
 
 
 
@@ -134,7 +633,9 @@ $$
 
 action value，$$q_\pi(s,a) = \mathbb{E}\left[G_t \mid S_t = s,\ A_t = a\right]$$，从状态s出发采取行动a能得到的长期回报。**在每个状态下选择最大的action value 不断迭代，一定能得到最优策略。**
 
-与state value相关联$$v_\pi(s) = \sum_{a} \pi(a|s) q_\pi(s,a)$$，同时可以推出$$q_\pi(s,a) = \sum_{r\in\mathcal{R}} p(r|s,a)r + \gamma \sum_{s'\in\mathcal{S}} p(s'|s,a)v_\pi(s')$$
+
+
+与state value相关联**$$v_\pi(s) = \sum_{a} \pi(a|s) q_\pi(s,a)$$**，同时可以推出$$q_\pi(s,a) = \sum_{r\in\mathcal{R}} p(r|s,a)r + \gamma \sum_{s'\in\mathcal{S}} p(s'|s,a)v_\pi(s')$$
 
 
 
@@ -331,7 +832,7 @@ $\hat g$是无偏估计，$a_k$是大于0的系数
 
 Behavior Policy：用于收集数据的策略
 
-Target Policy：**被**学习被评估的策略
+Target Policy：被评估的策略
 
 on policy：Behavior Policy和Target Policy一致
 
@@ -545,3 +1046,74 @@ $$
 
 
 
+## Actor-critic method 
+
+Actor-critic 本质任然是 policy gradient，在公式中计算$q_t$时使用TD的方法就是**QAC**(on policy)
+
+
+
+Actor 指代 policy update；critic 代表 policy estimation or value estimation 
+
+
+
+### A2C
+
+A2C是QAC的推广，核心思想是：**引入一个新的偏置量减少估计的方差**，方差较大时，采样的样本会可能会偏离均值较远
+$$
+\begin{aligned} \nabla_{\theta} J(\theta) &= \mathbb{E}_{S\sim\eta,A\sim\pi}\left[\nabla_{\theta} \ln \pi(A|S,\theta_t) q_{\pi}(S,A)\right] \\ &= \mathbb{E}_{S\sim\eta,A\sim\pi}\left[\nabla_{\theta} \ln \pi(A|S,\theta_t) \left(q_{\pi}(S,A) - b(S)\right)\right] \end{aligned}
+$$
+
+
+为了使方差最小，偏置需要满足$$b(s) = \mathbb{E}_{A\sim\pi}\left[q(s,A)\right] = v_\pi(s)$$，于是公式有
+$$
+\begin{aligned} \nabla_{\theta} J(\theta) &= \mathbb{E}_{S\sim\eta,A\sim\pi}\left[\nabla_{\theta} \ln \pi(A|S,\theta_t) \left(q_{\pi}(S,A) - b(S)\right)\right] 
+\\&=\mathbb{E}_{S\sim\eta,A\sim\pi}\left[\nabla_{\theta} \ln \pi(A|S,\theta_t) \left(q_{\pi}(S,A) - v_{\pi}(S)\right)\right]
+\\&= \mathbb{E}_{S\sim\eta,A\sim\pi}\left[\nabla_{\theta} \ln \pi(A|S,\theta_t) \left(R + \gamma v_\pi(S') - v_\pi(S) \right)\right]
+
+\end{aligned}
+$$
+
+
+### off-policy Actor-critic
+
+policy gradient是on policy的，，那么Actor-critic式子中要求a~$\pi$，如果要实现off-policy那么经验数据来自μ，导致梯度有偏 $$\mathbb{E}_\mu \neq \mathbb{E}_\pi$$
+$$
+\begin{aligned} \nabla_{\theta} J(\theta) &= \mathbb{E}_{S\sim\eta,A\sim\pi}\left[\nabla_{\theta} \ln \pi(A|S,\theta_t) q_{\pi}(S,A)\right] \end{aligned}
+$$
+
+
+为了解决这一点，需要使用**importance sampling**，间接求解$E_\pi$
+$$
+\mathbb{E}_{X\sim \pi}\left[X\right] = \sum_{x} \pi(x)x = \sum_{x} μ(x) \underbrace{\frac{\pi(x)}{μ(x)}}_{f(x)} x = \mathbb{E}_{X\sim μ}\left[f(X)\right]
+$$
+在离散的情况下可以直接求解Eπ，但如果概率分布是连续的，会涉及到求解期望，可能无法求出，因此一般使用importance sampling
+
+
+
+### DPG
+
+Deterministic 指策略直接输出一个动作，$$a = \mu_\theta(s)$$  
+
+Deterministic Policy Deterministic Policy Gradient，确定性策略梯度
+
+
+
+DPG的优化目标与普通的策略梯度一致
+$$
+J(\theta) = \mathbb{E}_{s\sim \rho^\mu}\left[Q^\mu\left(s, \mu_\theta(s)\right)\right]
+\\
+
+\nabla_\theta J(\theta) = \mathbb{E}_{s\sim \rho^\mu}\left[\left.\nabla_\theta \mu_\theta(s)\nabla_a Q^\mu(s,a)\right|_{a=\mu_\theta(s)}\right]
+$$
+
++ $\mu_\theta$ 是当前策略 
++ $Q^\mu$ 是该策略对应的动作价值函数
++ $\rho^\mu$ 是状态访问分布
+
+
+
+该算法是**off-policy**的，不要求数据来自当前策略 
+
+
+
+DDPG是DPG的深度学习版本，其中$\mu_\theta$和$Q^\mu$用神经网络拟合

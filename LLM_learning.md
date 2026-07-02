@@ -507,7 +507,7 @@ EXECUTOR_PROMPT_TEMPLATE = """
 
 <img src="assets/image-20260630190417706.png" alt="image-20260630190417706" style="zoom:67%;" />
 
-## Memory系统的设计
+### Memory系统的设计
 
 记忆系统的工作流程如下，这种架构设计本质是通过冷热数据分离和结构化/非结构化混合存储（关系型，向量和图谱），解决单一存储模式下信息过载和检索精度不足的问题
 
@@ -537,7 +537,183 @@ EXECUTOR_PROMPT_TEMPLATE = """
 
 
 
+**记忆的管理与优化流**
 
++ 记忆的整合：但工作记忆被判定为具有长期价值时，系统会将其固化为情节记忆，防止关键信息因内存清理而丢失
++ 智能遗忘：执行多策略清理，根据信息的使用平吕、重要程度或预设的过期规则
++ 统计分析：进行跨类型的汇总分析，监控各类记忆的存储容量、检索效率以及命中率
+
+
+
+## 上下文工程
+
+上下文是**提供给LLM的、用于完成下一步推理或生成任务的全部信息集合**
+
+
+
+Context Engineering 是一门系统性学科，专注于设计、构建并维护一个动态系统，该系统负责在agent执行的每一步，为其智能地组装出最优的上下文组合，以确保任务能被可靠、高效地完成。
+
+把LLM比作CPU的，context window比作内存，context engineering就是内存管理器，负责在每一个时钟周期决定哪些数据应该被加载、哪些数据应该被患处、哪些数据应该被优先处理。
+
+<img src="assets/image-20260701085026384.png" alt="image-20260701085026384" style="zoom:67%;" />
+
+
+
+### 上下文工程的框架
+
+工业界总结出的系统新的上下文工程应对框架分为四个部分：写入，选取，压缩和隔离
+
+
+
+写入，将上下文持久化，超越上下文窗口的限制，在未来按需取用
+
++ 会话内写入：agent将中间思考、计划或临时数据写入一个会话内的草稿纸
++ 持久化写入：将具有长期价值的信息（用户偏好总结，关键事实）写入外部记忆系统
+
+
+
+选取，在每次LLM调用之前，从所有可用的信息源中，动态地拉去与当前子任务最相关的信息
+
++ 确定性选取：根据预设规则加载上下文，Claude Code在启动时，固定加载项目根目录下的CLAUDE.md文件
++ 模型驱动选取：当可用信息源过多时，可以利用模型自身的能力进行筛选
++ 检索式选取：通过相似度检索，从记忆、草稿纸或外部知识库选取信息
+
+
+
+压缩，在信息进入上下文窗口之前，进行有损或无损的压缩，用更少的token承载最核心的信号
+
+
+
+隔离，上下文工程中的隔离表现为多智能体架构，子智能体在各自的领域内隔离且并行工作，消化大量原始信息，最后将关键的信息提交给主智能体。
+
+
+
+## Agent工具协议
+
+Agent智能体工具协议(Agent Tool Protocol) 是一套标准化的通信规则，规定了AI智能体如何发现、理解、调用以及接收外部工具反馈的信息。
+
+### MCP
+
+MCP，模型上下文协议，定义了应用程序与AI模型之间交换上下文信息的方式，使得开发者能够以一致的方式将各种数据源、工具和功能连接到AI模型
+
+<img src="assets/image-20260701092226187.png" alt="image-20260701092226187" style="zoom:67%;" />
+
+
+
+MCP 由三个核心组件构成：Host、Client和Server
+
+1. **Host：就是agent本身**
+2. **Client：负责与适当的MCP Server 建立连接**
+3. **Server：提供服务的工具**
+
+
+
+**Host:Client = 1:N，Client:Server=1:1**
+
+<img src="assets/image-20260701093151802.png" alt="image-20260701093151802" style="zoom:67%;" />
+
+
+
+模型通过**prompt engineering**，即提供所有工具的结构化描述和few-shot的example 来确定使用哪些工具，因此工具文档**至关重要**
+
+
+
+### Skill
+
+Agent Skill 是一种轻量级的开放格式，可通过专业知识和工作流程扩展AI代理的功能
+
+Skill的核心是一个包含**Skill.md文件的文件夹**，该文件包含**元数据以及指示智能体如何执行特定任务的指令，还可以包含脚本、模板和参考资料**
+
+```python
+my-skill/
+├── SKILL.md        # Required: instructions + metadata
+├── scripts/        # Optional: executable code
+├── references/     # Optional: documentation
+└── assets/         # Optional: templates, resources
+```
+
+
+
+Skill.md 包含YAML前置元数据和Markdown指令，示例如下，
+
+```python
+---
+name: pdf-processing
+description: Extract PDF text, fill forms, merge files. Use when handling PDFs.
+---
+
+# PDF Processing
+
+## When to use this skill
+Use this skill when the user needs to work with PDF files...
+
+## How to extract text
+1. Use pdfplumber for text extraction...
+
+## How to fill forms
+...
+```
+
+顶部必须包括name和description
+
+
+
+scripts/目录 **包含 Claude 通过 Bash 工具运行的可执行代码——自动化脚本、数据处理器、验证器**，**其中的内容只会被执行不会被读取，不占用上下文**
+
+~~~markdown
+从头开始创建新 skill 时，始终运行 `init_skill.py` 脚本。该脚本可以方便地生成一个新的模板 skill 目录，
+用法：
+```scripts/init_skill.py <skill-name> --path <output-directory>```
+脚本：
+    - 在指定路径创建 skill 目录
+    - 生成带有适当 frontmatter 和 TODO 占位符的 SKILL.md 模板
+    - 创建示例资源目录：scripts/、references/ 和 assets/
+    - 在每个目录中添加可自定义或删除的示例文件
+~~~
+
+
+
+references/目录 **存储引用时读入上下文的文档，可以按需加载**，在Skill.md中可以如下引用
+
+```python
+#### 1.4 学习框架文档
+**加载并阅读以下参考文件：**
+- **MCP 最佳实践：** [📄 查看最佳实践](./reference/mcp_best_practices.md) - 所有 MCP 服务器的核心
+
+**对于 Python 实现，还要加载：**
+- **Python SDK 文档：** 使用 WebFetch 加载 `https://raw.githubusercontent.com/modelcontextproto`
+- [🐍 Python 实现指南](./reference/python_mcp_server.md) - Python 特定的最佳实践和示例
+
+**对于 Node/TypeScript 实现，还要加载：**
+- **TypeScript SDK 文档：** 使用 WebFetch 加载 `https://raw.githubusercontent.com/modelcontextp`
+- [⚡ TypeScript 实现指南](./reference/node_mcp_server.md) - Node/TypeScript 特定的最佳实践和示例
+```
+
+
+
+asserts/目录 包含Claude按路径应用但不加载到上下文中的模板和二进制文件——HTMl模板，CSS文件，图像，字体
+
+
+
+Skill运用渐进式披露来有效管理上下文信息
+
+1. 启动时，Agent只会加载每个可用的Skill的**名称和描述**
+2. 当任务与技能描述匹配时，Agent会将完整的Skill.md指令读取到上下文中
+3. Agent程序按照指令执行，可根据需要加载引用的文件或执行捆绑代码
+
+
+
+### MCP与Skill
+
+|                | MCP                          | Skills                         |
+| :------------- | :--------------------------- | ------------------------------ |
+| **类比**       | USB 协议                     | 应用程序                       |
+| **核心能力**   | 连接外部系统                 | 编码专业知识                   |
+| **工具来源**   | 外部 MCP Server              | 内置工具 + 自带脚本            |
+| **上下文消耗** | 预加载，成本高               | 渐进式披露，按需加载           |
+| **网络访问**   | ✅ 支持                       | ❌ 仅本地执行                   |
+| **分发方式**   | URL 接入，面向外部用户       | 文件复制，面向内部团队         |
+| **适用场景**   | 远程 API、实时数据、对外服务 | 本地流程、专业方法论、内部工具 |
 
 
 

@@ -271,7 +271,7 @@ e r -> er
 1. **数据层面**： 通过高质量数据清洗、引入事实性知识以及强化学习与人类反馈 (RLHF) 等方式，从源头减少幻觉。
 2. **模型层面**： 探索新的模型架构，或让模型能够表达其对生成内容的不确定性。
 3. 推理与生成层面
-   1. **检索增强生成 (Retrieval-Augmented Generation, RAG)**： 这是目前缓解幻觉的有效方法之一。RAG 系统通过在生成之前从外部知识库（如文档数据库、网页）中检索相关信息，然后将检索到的信息作为上下文，引导模型生成基于事实的回答。
+   1. **检索增强生成 (Retrieval-Augmented Generation, RAG)**： 这是目前缓解幻觉的有效方法之一。系统通过在生成之前从外部知识库（如文档数据库、网页）中检索相关信息，然后将检索到的信息作为上下文，引导模型生成基于事实的回答。
    2. **多步推理与验证**： 引导模型进行多步推理，并在每一步进行自我检查或外部验证。
    3. **引入外部工具**： 允许模型调用外部工具（如搜索引擎、计算器、代码解释器）来获取实时信息或进行精确计算。
 
@@ -714,6 +714,648 @@ Skill运用渐进式披露来有效管理上下文信息
 | **网络访问**   | ✅ 支持                       | ❌ 仅本地执行                   |
 | **分发方式**   | URL 接入，面向外部用户       | 文件复制，面向内部团队         |
 | **适用场景**   | 远程 API、实时数据、对外服务 | 本地流程、专业方法论、内部工具 |
+
+
+
+# Langchain
+
+## 简介
+
+LangChain 是一个用于构建大语言模型（LLM）应用的 Python 框架
+
+| 组件                            | 作用                   | 核心功能                                                | 常见用途                           |
+| :------------------------------ | :--------------------- | :------------------------------------------------------ | :--------------------------------- |
+| **Models（模型）**              | 连接大语言模型         | 统一模型接口支持多模型切换调用 GPT / Claude / Gemini 等 | 聊天机器人文本生成AI 问答          |
+| **Prompts（提示词模板）**       | 管理 Prompt 模板       | Prompt 参数化动态变量替换模板复用                       | AI 对话内容生成结构化输出          |
+| **Document Loader（文档加载）** | 读取外部文档数据       | 加载 PDF / TXT / DOCX读取网页与数据库统一文档格式       | 知识库RAG 系统文档问答             |
+| **Text Splitter（文本切分）**   | 拆分长文本             | 文本 Chunk 切分控制 Token 长度优化向量检索              | RAG向量数据库长文本处理            |
+| **Memory（记忆）**              | 实现上下文记忆         | 保存聊天历史长期记忆对话状态管理                        | 聊天机器人AI 助手Agent             |
+| **Retriever（检索器）**         | 检索相关知识内容       | 向量搜索语义检索RAG 数据召回                            | 企业知识库AI 搜索文档问答          |
+| **Tools（工具）**               | 调用外部工具与 API     | 搜索互联网数据库查询执行代码                            | AI Agent自动化任务数据分析         |
+| **Output Parser（输出解析器）** | 解析模型输出结果       | 结构化输出JSON 解析格式校验                             | API 返回自动化系统数据处理         |
+| **Chains（链）**                | 组合多个组件形成工作流 | 多步骤执行流程编排组件串联                              | 复杂 AI 应用 RAG 工作流 Agent 系统 |
+
+## 环境搭建
+
+| 层次       | 说明                                          | 包名                |
+| :--------- | :-------------------------------------------- | :------------------ |
+| 核心抽象层 | 定义模型、工具、消息等基础接口                | langchain-core      |
+| 用户接口层 | 提供 init_chat_model、create_agent 等高阶 API | langchain           |
+| 集成层     | 连接 OpenAI、Anthropic、Ollama 等第三方服务   | langchain-openai 等 |
+
+
+
+安装命令
+
+>  pip install langchain langchain-openai python-dotenv
+
+python-dotenv从 .env 文件加载 API Key，保证安全
+
+```python
+# 文件路径：.env
+OPENAI_API_KEY=sk-your-api-key-here
+```
+
+
+
+简单示例
+
+```python
+import os
+# hugging face镜像设置，如果国内环境无法使用启用该设置
+os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
+from dotenv import load_dotenv
+from langchain_community.document_loaders import UnstructuredMarkdownLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_core.vectorstores import InMemoryVectorStore
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_openai import ChatOpenAI
+
+load_dotenv() # 会从文件结构中自上而下的寻找.env
+
+markdown_path = "../../data/C1/markdown/easy-rl-chapter1.md"
+
+# 加载本地markdown文件
+loader = UnstructuredMarkdownLoader(markdown_path)
+docs = loader.load()
+
+# 文本分块
+text_splitter = RecursiveCharacterTextSplitter()
+chunks = text_splitter.split_documents(docs)
+
+# 中文嵌入模型
+embeddings = HuggingFaceEmbeddings(
+    model_name="BAAI/bge-small-zh-v1.5",
+    model_kwargs={'device': 'cpu'},
+    encode_kwargs={'normalize_embeddings': True}
+)
+  
+# 构建向量存储
+vectorstore = InMemoryVectorStore(embeddings)
+vectorstore.add_documents(chunks)
+
+# 提示词模板
+prompt = ChatPromptTemplate.from_template("""请根据下面提供的上下文信息来回答问题。
+请确保你的回答完全基于这些上下文。
+如果上下文中没有足够的信息来回答问题，请直接告知：“抱歉，我无法根据提供的上下文找到相关信息来回答此问题。”
+
+上下文:
+{context}
+
+问题: {question}
+
+回答:"""
+                                          )
+
+# 配置大语言模型
+
+# 使用 AIHubmix
+llm = ChatOpenAI(
+    model="glm-4.7-flash-free",
+    temperature=0.7,
+    max_tokens=4096,
+    api_key=os.getenv("DEEPSEEK_API_KEY"),
+    base_url="https://aihubmix.com/v1"
+)
+
+# 用户查询
+question = "文中举了哪些例子？"
+
+# 在向量存储中查询相关文档
+retrieved_docs = vectorstore.similarity_search(question, k=3)
+docs_content = "\n\n".join(doc.page_content for doc in retrieved_docs)
+
+answer = llm.invoke(prompt.format(question=question, context=docs_content))
+print(answer)
+```
+
+## 工具
+
+使用`@tool`装饰器可以把普通python函数变为Agent可调用的工具
+
+```python
+from dotenv import load_dotenv
+load_dotenv()
+
+from langchain.tools import tool
+
+@tool
+def get_weather(city: str) -> str:
+    """查询指定城市的天气情况。
+
+    Args:
+        city: 城市名称，如 "杭州"、"北京"
+    """
+    # 这里用模拟数据演示
+    # 实际项目中可以替换为真实的天气 API 调用
+    weather_data = {
+        "杭州": "晴，25°C，湿度 60%",
+        "北京": "多云，18°C，湿度 45%",
+        "上海": "小雨，22°C，湿度 80%",
+    }
+    return weather_data.get(city, f"未找到 {city} 的天气数据")
+
+@tool
+def calculate(expression: str) -> str:
+    """执行数学计算。支持加减乘除等基本运算。
+
+    Args:
+        expression: 数学表达式，如 "3 * 7 + 2"
+    """
+    try:
+        # 安全地计算数学表达式
+        result = eval(expression, {"__builtins__": {}}, {})
+        return f"计算结果: {expression} = {result}"
+    except Exception as e:
+        return f"计算错误: {e}"
+```
+
+
+
+**工具函数的注释就是工具的描述，模型会根据描述判断何时调用这个工具**
+
+
+
+工具集成，在create_agent中传入工具参数，由agent自行决定如何使用
+
+```python
+agent = create_agent(
+    model=model, # 使用的语言模型
+    tools=[get_weather, calculate], #工具列表 
+    system_prompt="你是一个乐于助人的助手，会使用工具来回答问题。", # 系统提示词，定义Agent的行为和角色
+)
+```
+
+
+
+**bind_tools**将工具说明书塞给模型，这里模型不会做任何事，是否执行函数需要手写循环，相比于agent调用，bing_tools赋予了更细化的控制
+
+```python
+model = init_chat_model("deepseek:deepseek-v4-flash", temperature=0)
+
+# 用字典描述工具（OpenAI function calling 格式）
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "查询指定城市的天气",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "city": {
+                        "type": "string",
+                        "description": "城市名称，如 杭州、北京"
+                    }
+                },
+                "required": ["city"]
+            }
+        }
+    }
+]
+
+# bind_tools() 将工具绑定到模型
+# 模型现在"知道"有 get_weather 这个工具可用
+model_with_tools = model.bind_tools(tools)
+```
+
+```python
+messages = [HumanMessage(content="北京天气怎么样")]
+
+while True:
+    response = llm_with_tools.invoke(messages)
+
+    if not response.tool_calls:
+        # 没有工具调用 → 说明已经是最终答案
+        print(response.content)
+        break
+
+    # 有工具调用 → 你要自己执行
+    tool_call = response.tool_calls[0]
+
+    if tool_call["name"] == "get_weather":
+        result = get_weather(**tool_call["args"])
+
+    # 把工具结果“再喂回模型”
+    messages.append(response)
+    messages.append(
+        ToolMessage(content=result, tool_call_id=tool_call["id"])
+    )
+```
+
+
+
+tool_calls是**大模型请求调用工具/函数的结构化输出**
+
+
+
+对于复杂工具，**Pytandic**模型定义参数比手写字典更清晰
+
+```python
+from pydantic import BaseModel, Field
+from langchain.chat_models import init_chat_model
+
+# 用 Pydantic 定义工具的参数结构，field给字段加规则/描述信息/默认值
+class WeatherInput(BaseModel):
+    """查询指定城市的天气情况"""
+    city: str = Field(description="城市名称，如 杭州、北京")
+    unit: str = Field(
+        default="celsius",
+        description="温度单位，celsius（摄氏度）或 fahrenheit（华氏度）"
+    )
+
+class CalculatorInput(BaseModel):
+    """执行数学计算"""
+    expression: str = Field(
+        description="要计算的数学表达式，如 '(3 + 5) * 2'"
+    )
+    
+...
+model_with_tools = model.bind_tools([WeatherInput, CalculatorInput])
+```
+
+
+
+Pytandic也可以约束复杂工具函数的参数
+
+```python
+# 定义参数模型（提供更精细的参数控制）
+class CourseSearchInput(BaseModel):
+    """搜索课程参数"""
+    keyword: str = Field(
+        description="搜索关键词，支持模糊匹配",
+        min_length=1,            # 最少 1 个字符
+        max_length=50,           # 最多 50 个字符
+    )
+    category: str = Field(
+        default="all",
+        description="课程类别：all（全部）、frontend（前端）、backend（后端）、data（数据科学）",
+        pattern=r"^(all|frontend|backend|data)$",  # 限定可选值
+    )
+    page: int = Field(
+        default=1,
+        description="页码，从 1 开始",
+        ge=1,                    # 大于等于 1
+        le=100,                  # 小于等于 100
+    )
+
+
+@tool(args_schema=CourseSearchInput)
+def search_course(keyword: str, category: str = "all", page: int = 1) -> str:
+    """在菜鸟教程 RUNOOB 中搜索课程"""
+    return f"搜索 '{keyword}' (分类: {category}, 第 {page} 页)：共找到 15 条结果"
+```
+
+## 工具高级特性
+
+**return_direct**，有时工具的结果本身就是最终答案，设置`return_direct=True`后，工具执行完就自动结束agent循环，返回工具结果
+
+```python
+# return_direct 工具：结果直接作为最终输出
+@tool(return_direct=True)
+def search_direct(keyword: str) -> str:
+    """搜索菜鸟教程 RUNOOB 的课程（直接返回模式）。
+
+    当用户只需要搜索结果，不需要额外分析时使用此工具。
+    """
+    return f"搜索结果：Python3 基础教程、Python 数据分析、Python 爬虫入门"
+```
+
+
+
+**ToolException**，工具执行过程中可能会出错，使用 **ToolException** 抛出明确的工具异常，
+
+```python
+from langchain.tools import tool
+from langchain_core.tools import ToolException
+
+@tool
+def get_user_info(user_id: int) -> str:
+    """根据用户 ID 查询用户信息。
+
+    Args:
+        user_id: 用户 ID，必须是正整数
+    """
+    # 数据校验
+    if user_id <= 0:
+        # 抛出 ToolException，而不是普通 Exception
+        # ToolException 会被 Agent 捕获并告知模型
+        raise ToolException(f"用户 ID 必须为正整数，收到了: {user_id}")
+
+    # 模拟数据库查询
+    users = {
+        1: "张三（VIP 会员，注册于 2024-01-15）",
+        2: "李四（普通用户，注册于 2024-03-20）",
+    }
+
+    if user_id not in users:
+        raise ToolException(f"未找到 ID 为 {user_id} 的用户")
+
+    return users[user_id]
+```
+
+
+
+## 创建Agent
+
+```python
+# 步骤 2：创建 Agent
+from langchain.agents import create_agent
+from langchain.chat_models import init_chat_model
+
+# 初始化模型
+model = init_chat_model("openai:gpt-4o-mini")
+
+# 创建 Agent，传入模型和工具列表
+agent = create_agent(
+    model=model, # 使用的语言模型
+    tools=[get_weather, calculate], #工具列表 
+    system_prompt="你是一个乐于助人的助手，会使用工具来回答问题。", # 系统提示词，定义Agent的行为和角色
+)
+```
+
+
+
+init_chat_model，以**统一的方**式连接 20 多种模型提供商，不需要记忆每个提供商的类名和参数差异。
+
+```python
+from langchain.chat_models import init_chat_model
+
+# 完整语法
+model = init_chat_model(
+    model,                    # str | None：模型名称（provider:model 格式）
+    *,
+    model_provider=None,      # str | None：单独的模型提供商 等同于provider
+    configurable_fields=None, # None | "any" | list[str]：可运行时修改的字段 运行时是否可以修改参数
+    config_prefix=None,       # str | None：配置键前缀 项目中可能使用多个模型，而参数(.env文件中)因此可能混在一起，前缀用于区分
+    **kwargs,                 # 模型特定参数（temperature、max_tokens 等）
+)
+
+# provider:model 格式，如果不指定前缀，函数会尝试自动推断
+model = init_chat_model("deepseek:deepseek-v4-flash")
+model = init_chat_model("anthropic:claude-sonnet-4-5-20250929")
+model = init_chat_model("deepseek:deepseek-chat")
+model = init_chat_model("ollama:llama3.2")
+model = init_chat_model("groq:llama-3.3-70b")
+```
+
+
+
+## 运行Agent
+
+```python
+# 步骤 3：运行 Agent
+
+# 构建输入消息
+# HumanMessage 把用户输入包装成标准对话格式
+from langchain.messages import HumanMessage
+
+inputs = {"messages": [HumanMessage(content="杭州今天天气怎么样？")]}
+
+# invoke() 运行 Agent，返回最终状态
+result = agent.invoke(inputs)
+
+# 查看消息历史（包含 AI 的工具调用和工具返回结果）
+print("=== 完整消息历史 ===")
+for msg in result["messages"]:
+    print(f"[{msg.type}] {msg.content[:100]}")  # 截取前 100 字符
+
+print("\n=== 最终回复 ===")
+# 最后一条 AI 消息就是最终答案
+print(result["messages"][-1].content)
+```
+
+
+
+异步执行
+
+```python
+# 异步运行 Agent
+import asyncio
+from langchain.messages import HumanMessage
+
+
+async def main():
+    # ainvoke() 是 invoke() 的异步版本
+    inputs = {"messages": [HumanMessage(content="杭州天气怎么样？")]}
+    result = await agent.ainvoke(inputs)
+    print(result["messages"][-1].content)
+
+
+# 运行异步函数
+asyncio.run(main())
+```
+
+## Model常用参数
+
++ temperature，取值范围在0~2，控制模型输出的随机程度
+
+  + | temperature 值 | 效果                               | 适用场景                       |
+    | :------------- | :--------------------------------- | :----------------------------- |
+    | 0 ~ 0.3        | 输出稳定、确定，每次结果几乎一致   | 数据提取、分类、代码生成、翻译 |
+    | 0.5 ~ 0.7      | 适度的创造性，输出自然但不偏离主题 | 日常对话、内容总结             |
+    | 0.8 ~ 1.2      | 输出多样化，有较多发挥空间         | 创意写作、头脑风暴             |
+    | 1.3 ~ 2.0      | 输出非常随机，可能出现意外内容     | 探索性生成（不太推荐用于生产） |
+
++ max_tokens，限制模型输出的最大Token数
+
++ timeout，单次请求的最大等待时间，None表示不受限制
+
++ max_retries，失败后的重试次数
+
+
+
+## 返回结构化信息
+
+**with_structured_output**让模型返回结构化信息
+
+```python
+# 定义期望的输出结构
+class PersonInfo(BaseModel):
+    """从文本中提取的人物信息"""
+    name: str = Field(description="人物姓名")
+    age: int = Field(description="年龄")
+    occupation: str = Field(description="职业")
+    skills: list[str] = Field(description="技能列表")
+```
+
+
+
+支持嵌套信息
+
+```python
+class Ingredient(BaseModel):
+    """食材信息"""
+    name: str = Field(description="食材名称")
+    amount: str = Field(description="用量，如 '200g'、'2个'")
+
+
+class CookingStep(BaseModel):
+    """烹饪步骤"""
+    step_number: int = Field(description="步骤编号")
+    description: str = Field(description="步骤描述")
+    duration_minutes: int = Field(description="此步骤需要的时间（分钟）")
+
+
+class Recipe(BaseModel):
+    """菜谱"""
+    dish_name: str = Field(description="菜名")
+    difficulty: str = Field(description="难度：简单、中等、困难")
+    ingredients: list[Ingredient] = Field(description="食材列表")
+    steps: list[CookingStep] = Field(description="烹饪步骤")
+
+
+model = init_chat_model("deepseek:deepseek-v4-flash", temperature=0)
+structured_model = model.with_structured_output(Recipe)
+```
+
+
+
+## 消息类型
+
+LangChain 定义了四种核心消息类型，分别对应对话中的不同角色：
+
+| 类型          | 角色    | 说明                               | 典型内容                 |
+| :------------ | :------ | :--------------------------------- | :----------------------- |
+| HumanMessage  | 用户    | 用户发送的消息                     | "今天天气怎么样？"       |
+| AIMessage     | AI 助手 | 模型的回复，可能包含 tool_calls    | "今天杭州晴天，25°C"     |
+| SystemMessage | 系统    | 系统指令，定义 AI 的角色和行为规则 | "你是一个专业的天气助手" |
+| ToolMessage   | 工具    | 工具执行后的返回结果               | "晴，25°C，湿度 60%"     |
+
+
+
+基本属性
+
+```python
+# 基本属性
+print(f"content: {msg.content}")      # 消息内容
+print(f"type: {msg.type}")            # 消息类型（human/ai/system/tool）
+print(f"id: {msg.id}")                # 自动生成的唯一 ID
+
+# text 属性：如果是文本内容，返回文本；否则返回 ""
+print(f"text: {msg.text}")
+
+# pretty_repr()：格式化打印，适合调试
+print(f"美化输出:\n{msg.pretty_repr()}")
+```
+
+
+
+```python
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain.chat_models import init_chat_model
+import dotenv
+dotenv.load_dotenv()
+
+model = init_chat_model("deepseek:deepseek-v4-flash", temperature=0.7)
+
+# 没有系统指令的回复
+messages_no_system = [HumanMessage(content="介绍菜鸟教程")]
+response = model.invoke(messages_no_system)
+print(f"无系统指令: {response.content[:80]}...")
+
+# 有系统指令的回复
+messages_with_system = [
+    SystemMessage(content="你是一个小红书风格的博主，回复要活泼、使用 emoji、带话题标签"),
+    HumanMessage(content="介绍菜鸟教程")
+]
+response = model.invoke(messages_with_system)
+print(f"\n有系统指令: {response.content}")
+```
+
+
+
+输入内容中混合文本和图片时，需要用到ContentBlock
+
+| 类型                  | 说明                      | 用途                 |
+| :-------------------- | :------------------------ | :------------------- |
+| PlainTextContentBlock | 纯文本内容                | 普通文字消息         |
+| ImageContentBlock     | 图片内容（base64 或 URL） | 多模态模型的图片输入 |
+| ToolCall              | 工具调用请求              | AI 请求调用工具      |
+
+```python
+from langchain_core.messages import HumanMessage, PlainTextContentBlock, ImageContentBlock,SystemMessage
+
+complex_msg = HumanMessage(content=[
+    PlainTextContentBlock(text="这张图片里是什么？"),
+    # 图片可以是 URL 或 base64 编码
+    ImageContentBlock(
+        url="https://example.com/photo.jpg"
+    ),
+])
+```
+
+
+
+裁剪消息历史
+
+```python
+# 裁剪消息以适应模型的上下文窗口（最多 1000 tokens）
+# strategy="last" 保留最后的系统消息和最近的对话
+trimmed = trim_messages(
+    messages,
+    max_tokens=1000,           # 最多保留 1000 tokens
+    strategy="last",           # 保留最后的系统消息 + 最近的对话
+    token_counter=model,       # 使用模型的 token 计数方式
+    include_system=True,       # 始终保留 SystemMessage
+    start_on="human",          # 裁剪后以 human 消息开头
+)
+```
+
+
+
+删除特定的消息
+
+```python
+from langchain_core.messages import RemoveMessage, HumanMessage, AIMessage
+removal = RemoveMessage(id="msg_3")
+```
+
+
+
+
+
+
+
+# RAG
+
+## RAG简介
+
+系统通过在生成之前从外部知识库（如文档数据库、网页）中检索相关信息，然后将检索到的信息作为上下文，引导模型生成基于事实的回答。
+
+RAG不仅可以解决模型幻觉，还能填补通用模型与专业领域之间的鸿沟
+
+
+
+RAG的技术原理
+
++ **检索阶段：搜索非参数化知识（精准、可更新的外部数据）**
+  + **知识向量化：嵌入模型将外部知识库编码为向量索引，存入向量数据库**
+  + **语义召回：用户发起查询时，检索模块用嵌入模型将问题向量化，通过相似度检索从海量数据中精准锁定与问题最相关的文档片段**
++ **生成阶段：融合两种知识**
+  + **上下文整合：生成模块接收检索阶段送来的相关文档片段以及用户原始问题**
+  + **指令引导生成：该模块会遵循预设的Prompt指令，将上下文与问题有效整合，引导LLM进行可控的、有理有据的文本生成**
+
+<img src="https://datawhalechina.github.io/all-in-rag/chapter1/images/1_1_1.svg" alt="RAG 双阶段架构示意图" style="zoom:67%;" />
+
+
+
+## 构建最小可行系统
+
+1. 数据准备与清洗：将多源异构数据标准化，采用合理的**分块**策略，避免信息在分各种支离破碎
+2. 索引构建：将切分好的文本通过**嵌入模型**转化为向量，并存入数据库，可以在此阶段关联**元数据**（来源、页码）
+3. 检索策略优化：不依赖单一的向量搜索，可以采用**混合搜索**（向量+关键词）等方式提升召回率，并引入重排序模型对检索结果二次优化
+4. 生成与提升工程：设计一套清晰的Prompt模板，引导LLM基于检索到的上下文回答问题，并明确要求模型“不知道就睡不知道”，防止幻觉
+
+
+
+## 评估
+
+RAG系统的好坏会从多个维度进行量化评估：检索相关性，语义准确性（回到是否正确），词汇匹配度（专业术语是否使用得当）
+
+
 
 
 

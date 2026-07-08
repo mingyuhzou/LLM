@@ -18,3 +18,5 @@ all-in-rag学习 7.10之前完成
 
 agent进阶 7-8月份
 
+后训练
+https://github.com/Simple-Efficient/RL-Factory

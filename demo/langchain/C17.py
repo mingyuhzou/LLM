@@ -1,7 +1,7 @@
 import asyncio
 import os
 
-from langchain_huggingface import HuggingFaceEmbeddings
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.core import Settings, SimpleDirectoryReader, VectorStoreIndex
 from llama_index.core.evaluation import QueryResponseDataset, FaithfulnessEvaluator, RelevancyEvaluator, BatchEvalRunner
 from llama_index.core.node_parser import SentenceWindowNodeParser, SentenceSplitter
@@ -12,7 +12,7 @@ import dotenv
 dotenv.load_dotenv()
 
 Settings.llm=DeepSeek(model='deepseek-chat',temperature=0.1,aip_key=os.getenv('DEEPSEEK_API_KEY'))
-Settings.embed_model=HuggingFaceEmbeddings(model_name='BAAI/bge-small-en')
+Settings.embed_model=HuggingFaceEmbedding(model_name='BAAI/bge-small-en')
 
 async def main():
     reader=SimpleDirectoryReader(input_files=['data/C3/pdf/IPCC_AR6_WGII_Chapter03.pdf'])

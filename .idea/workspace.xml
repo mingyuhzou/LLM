@@ -5,13 +5,20 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="e7f83a05-7735-4159-b5f2-06d4021248d1" name="更改" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/LLM_learning.md" beforeDir="false" afterPath="$PROJECT_DIR$/LLM_learning.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/demo/langchain/C17.py" beforeDir="false" afterPath="$PROJECT_DIR$/demo/langchain/C17.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Python Script" />
+      </list>
+    </option>
   </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
@@ -20,6 +27,9 @@
   &quot;associatedIndex&quot;: 8
 }</component>
   <component name="ProjectId" id="3GJ8bNPQqoJAFOfFizwfH0QmJeF" />
+  <component name="ProjectLevelVcsManager">
+    <ConfirmationsSetting value="1" id="Add" />
+  </component>
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
@@ -30,7 +40,7 @@
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.git.unshallow": "true",
     "git-widget-placeholder": "main",
-    "last_opened_file_path": "E:/LLM",
+    "last_opened_file_path": "E:/LLM/demo/cook-rag",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
     "node.js.selected.package.eslint": "(autodetect)",
@@ -40,6 +50,14 @@
     "vue.rearranger.settings.migration": "true"
   }
 }]]></component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="E:\LLM\demo\cook-rag" />
+    </key>
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="E:\LLM\demo\cook-rag\rag_module" />
+    </key>
+  </component>
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
@@ -57,6 +75,8 @@
       <updated>1783678382368</updated>
       <workItem from="1783678384091" duration="646000" />
       <workItem from="1783754066338" duration="2186000" />
+      <workItem from="1783759935367" duration="3455000" />
+      <workItem from="1783919981866" duration="11789000" />
     </task>
     <servers />
   </component>

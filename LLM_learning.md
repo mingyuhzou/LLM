@@ -1666,10 +1666,6 @@ response = query_engine.query(
 
 
 
-
-
-
-
 ## Milvus
 
 Milvus 是一个开源的、专为**大规模向量**相似性搜索和分析而设计的向量数据库，主要用于生产环境。

@@ -3161,7 +3161,7 @@ $$
 
 代入优势函数，最终有公式
 $$
-\begin{aligned} J_{\text{PPO}}^{\theta'}(\theta) &= J^{\theta'}(\theta) - \beta \cdot \text{KL}(\theta, \theta') \\[4pt] J^{\theta'}(\theta) &= \mathbb{E}_{(s_t,a_t)\sim \pi_{\theta'}} \left[ \frac{p_\theta(a_t|s_t)}{p_{\theta'}(a_t|s_t)} A^{\theta'}(s_t,a_t) \right] \end{aligned} 
+\begin{aligned} J_{\text{PPO}}^{\theta'}(\theta) &= J^{\theta'}(\theta) - \beta \cdot \text{KL}(\theta, \theta') \\[4pt] J^{\theta'}(\theta) &= \mathbb{E}_{(s_t,a_t)\sim \pi_{\theta'}} \left[ \frac{p_\theta(a_t|s_t)}{p_{\theta'}(a_t|s_t)} A^{\theta'}(s_t,a_t) \right] \end{aligned}
 $$
 
 
@@ -3181,6 +3181,67 @@ $$
 
 
 
+在RLHF中，`PPO`算法需要加载**四个模型**，两个用于训练，两个用于推理
+
+| 模型                          | 用途                        | 是否训练          | 是否参与推理    |
+| ----------------------------- | --------------------------- | ----------------- | --------------- |
+| Policy Model（Actor / πθ）    | 当前要优化的策略模型        | ✅训练             | ✅生成回答       |
+| Reference Model（Ref / πref） | 原始 SFT 模型，用于 KL 约束 | ❌冻结             | ✅计算参考概率   |
+| Reward Model（RM）            | 给回答打分                  | ❌冻结，预训练好了 | ✅打 reward      |
+| Value Model（Critic / Vθ）    | 预测 value，计算 advantage  | ✅训练             | ❌（训练时前向） |
+
+![image-20260717152847988](./assets/image-20260717152847988.png)
 
 
+
+## DPO
+
+`DPO` Direct Preference Optimization, 直接偏好优化，不需要额外训练**奖励模型**，只需偏好数据就可以直接训练。
+$$
+\mathcal{L}_{\text{DPO}}(\pi_\theta; \pi_{\text{ref}}) = -\mathbb{E}_{(x,y_w,y_l)\sim \mathcal{D}}\left[
+\log\sigma\left(
+\beta\log\frac{\pi_\theta(y_w|x)}{\pi_{\text{ref}}(y_w|x)}
+- \beta\log\frac{\pi_\theta(y_l|x)}{\pi_{\text{ref}}(y_l|x)}
+\right)
+\right]
+$$
+
++ $\sigma$：sigmoid 函数
++ $\beta$：超参数，一般在 $0.1 - 0.5$ 之间
++ $y_w$：某条偏好数据中好的 response，w 即 win 
++ $y_l$：某条偏好数据中差的 response，l 即 loss，偏好数据也叫 comparision data
++ $\pi_\theta(y_w|x)$：给定输入 $x$，当前策略模型生成优质回复的累积概率（各token概率乘积，以代码实现为准） 
++ $\pi_{ref}(y_l|x)$：给定输入 $x$，参考模型生成劣质回复的累积概率
+
+
+
+## GRPO
+
+`GRPO`的核心思想是通过**组内相对奖励**来估计基线，从而避免使用额外的**价值函数**模型，作者认为价值函数模型占用了额外的显存和计算资源。
+
+
+
+GRPO与PPO的不同可以从下图中看出，其中q: 问题，Policy model:当前训练的模型 ($\pi$)，o: 模型的回答
+
+
+
+<img src="./assets/image-20260717160152989.png" alt="image-20260717160152989" style="zoom:67%;" />
+
+- GRPO 省略了 **value function model**.
+- GRPO reward 计算，改成了一个q 生成**多个r**, 然后reward 打分。计算组内的均值和标准差，得到$$ A_i = \frac{r_i - \mu}{\sigma} $$
+- PPO优势函数计算时，**KL** 是包含在GAE内部的。 GRPO 直接挪到了外面，同时修改了计算方法。
+
+
+$$
+\begin{aligned}
+\mathcal{J}_{\text{GRPO}}(\theta) &= \mathbb{E}\Big[ q \sim P(Q),\ \{o_i\}_{i=1}^G \sim \pi_{\theta_{\text{old}}}(O|q) \Big] \\
+&\quad \frac{1}{G}\sum_{i=1}^G \frac{1}{|o_i|}\sum_{t=1}^{|o_i|} \Bigg\{
+\min\Bigg[
+\frac{\pi_\theta(o_{i,t}|q,o_{i,<t})}{\pi_{\theta_{\text{old}}}(o_{i,t}|q,o_{i,<t})}\hat{A}_{i,t},\
+\text{clip}\Big(\frac{\pi_\theta(o_{i,t}|q,o_{i,<t})}{\pi_{\theta_{\text{old}}}(o_{i,t}|q,o_{i,<t})},\ 1-\varepsilon,\ 1+\varepsilon\Big)\hat{A}_{i,t}
+\Bigg]
+- \beta D_{\text{KL}}\big[\pi_\theta \,\|\, \pi_{\text{ref}}\big]
+\Bigg\}
+\end{aligned}
+$$
 
